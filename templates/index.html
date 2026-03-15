@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escáner de DPI - Frontal</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 20px; 
+            background-color: #f4f4f9;
+        }
+        .camara-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        video { 
+            width: 100%; 
+            border-radius: 8px; 
+            background-color: #000;
+        }
+        /* Este es el marco guía para centrar el DPI frontal */
+        .guia-dpi {
+            position: absolute;
+            top: 20%;
+            left: 10%;
+            width: 80%;
+            height: 60%;
+            border: 3px dashed #00ff00;
+            border-radius: 10px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Oscurece el fondo alrededor del DPI */
+            pointer-events: none; /* Para que no bloquee clics */
+        }
+        .instrucciones {
+            position: absolute;
+            bottom: -30px;
+            width: 100%;
+            color: #333;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        #canvas { display: none; }
+        button { 
+            padding: 12px 24px; 
+            font-size: 16px; 
+            margin-top: 40px; 
+            cursor: pointer; 
+            background-color: #28a745; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            font-weight: bold;
+        }
+        button:hover { background-color: #218838; }
+        #resultado { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background: #fff; 
+            border-radius: 8px; 
+            text-align: left; 
+            max-width: 500px; 
+            margin-left: auto; 
+            margin-right: auto;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Escáner de DPI</h2>
+    <p>Coloca la parte frontal del DPI dentro del recuadro verde.</p>
+    
+    <div class="camara-container">
+        <video id="video" autoplay playsinline></video>
+        <div class="guia-dpi"></div>
+        <div class="instrucciones">Alinea el frente del DPI aquí</div>
+    </div>
+    
+    <button id="btn-escanear">Capturar DPI Frontal</button>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="resultado">Esperando captura...</div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const btnEscanear = document.getElementById('btn-escanear');
+        const divResultado = document.getElementById('resultado');
+
+        // Solicitar acceso a la cámara trasera (ideal para celulares)
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error al acceder a la cámara:", err);
+                divResultado.innerHTML = "<span style='color:red;'><b>Error:</b> No se pudo acceder a la cámara. Revisa los permisos.</span>";
+            });
+
+        btnEscanear.addEventListener('click', () => {
+            divResultado.innerHTML = "Procesando imagen, analizando frente del DPI...";
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                const formData = new FormData();
+                formData.append('imagen', blob, 'dpi_frontal.jpg');
+
+                // Petición al backend Flask
+                fetch('/escanear-dpi', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.error) {
+                        divResultado.innerHTML = `<span style='color:red;'><b>Error:</b> ${data.error}</span>`;
+                    } else {
+                        // Mostramos los datos extraídos
+                        divResultado.innerHTML = `
+                            <h3 style="margin-top:0;">Datos Extraídos:</h3>
+                            <b>CUI (DPI):</b> ${data.datos_procesados.dpi} <br><br>
+                            <b>Nombre:</b> ${data.datos_procesados.nombre} <br><br>
+                            <b>Fecha Nacimiento:</b> ${data.datos_procesados.fecha_nacimiento}
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error en la petición:', error);
+                    divResultado.innerHTML = "<span style='color:red;'><b>Error:</b> Hubo un problema al conectar con el servidor Flask.</span>";
+                });
+
+            }, 'image/jpeg', 0.9);
+        });
+    </script>
+</body>
+</html>
